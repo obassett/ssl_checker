@@ -1,8 +1,8 @@
-use std::{fmt, fs, path::PathBuf};
+use std::{fmt, path::PathBuf};
 
 // --- Configuration Error Type ---
 #[derive(Debug)]
-enum ConfigError {
+pub enum ConfigError {
     FileReadError(PathBuf, std::io::Error),
     TomlParseError(PathBuf, toml::de::Error),
     FileNotFound(PathBuf),
@@ -35,7 +35,7 @@ impl std::error::Error for ConfigError {}
 
 // --- SSL Check Error Type ---
 #[derive(Debug)]
-enum SslCheckError {
+pub enum SslCheckError {
     NetworkError(reqwest::Error),
     NoCertificatesFound(String),            // URL for context
     UrlParseError(String, url::ParseError), // Original URL string and error
