@@ -1,66 +1,88 @@
+pub mod certs;
 pub mod config;
 pub mod errors;
 
-use crate::config::AppConfig;
+use crate::certs::{extract_issuer, extract_subject_common_name, is_self_signed, valid_name};
 use crate::errors::SslCheckError;
+use crate::{certs::extract_sans, config::AppConfig};
 
 use futures;
 use reqwest::tls::TlsInfo;
 use tokio::task;
+use url::Url;
 use x509_parser::prelude::{FromDer, X509Certificate};
 
 #[derive(Debug)]
-pub struct CertCheckResult {
+pub struct SslCheck {
     pub url: String,
+    pub result: Result<CertCheckResult, SslCheckError>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CertCheckResult {
     pub issuer: String,
     pub subject: String,
+    pub sans: Option<Vec<String>>,
     pub is_valid: bool,
     pub days_remaining: i64,
 }
 
 impl CertCheckResult {
-    pub fn new(
-        url: String,
-        issuer: String,
-        subject: String,
-        is_valid: bool,
-        days_remaining: i64,
-    ) -> Self {
+    pub fn new(issuer: String, subject: String, is_valid: bool, days_remaining: i64) -> Self {
         Self {
-            url,
             issuer,
             subject,
+            sans: None,
             is_valid,
             days_remaining,
         }
     }
 
-    // TODO: Extract the Issueer from the cert more cleanly, and extract the CN and SANs to make sure they match the hostname part of url
-    pub fn from_x509_certificate(url: String, cert: X509Certificate) -> Self {
-        let issuer = cert.issuer().to_string();
-        let subject = cert.subject().to_string();
-        let is_valid = cert.validity().is_valid();
+    // TODO: Extract the Issuer from the cert more cleanly, and extract the CN and SANs to make sure they match the hostname part of url
+    pub fn from_x509_certificate(certificate_url: Url, cert: X509Certificate) -> Self {
+        // Get Validity from cert decode - We are then going to mark it false
+        // if we can't match the CN or SANS to the URL.
+        let mut is_valid = cert.validity().is_valid();
+
+        let issuer = extract_issuer(&cert);
+        let sans = extract_sans(&cert);
+
+        let subject = extract_subject_common_name(&cert);
         let time_to_expiry = cert.validity().time_to_expiration();
 
         let days_remaining = match time_to_expiry {
             Some(dur) => dur.whole_days(),
             None => 0_i64,
         };
+
+        if is_self_signed(&cert) {
+            is_valid = false;
+        };
+
+        // Validate URL is in subject or sans
+        if let Some(name) = certificate_url.domain() {
+            if !valid_name(&cert, name) {
+                is_valid = false;
+            }
+        } else {
+            tracing::error!(
+                url = certificate_url.to_string(),
+                "Unable to determine domamin from url"
+            );
+            is_valid = false;
+        }
+
         Self {
-            url,
             issuer,
             subject,
+            sans,
             is_valid,
             days_remaining,
         }
     }
 }
 
-// async fn process_urls(urls: Vec<String>) -> Vec<CertCheckResult> {}
-
-pub async fn run(
-    app_config: AppConfig,
-) -> Result<Vec<CertCheckResult>, Box<dyn std::error::Error>> {
+pub async fn run(app_config: AppConfig) -> Result<Vec<SslCheck>, Box<dyn std::error::Error>> {
     // For more structured logging of the config, you could do:
     // tracing::info!(
     //     urls = ?app_config.urls,
@@ -80,7 +102,7 @@ pub async fn run(
     tracing::info!("Starting SSL certificate checks...");
 
     let client = reqwest::Client::builder()
-        .danger_accept_invalid_certs(false) // Ensure we validate certs by default
+        .danger_accept_invalid_certs(true) // We want bad certs so we can report on them
         .use_rustls_tls() // Explicitly use rustls
         .tls_info(true)
         .build()?;
@@ -101,13 +123,7 @@ pub async fn run(
         .await
         .into_iter()
         .filter_map(|res| match res {
-            Ok(cert_result) => match cert_result {
-                Ok(cert) => Some(cert),
-                Err(e) => {
-                    tracing::error!(error = %e, "Failed to retrieve SSL certificate");
-                    None
-                }
-            },
+            Ok(cert_result) => Some(cert_result),
             Err(e) => {
                 tracing::error!(error = %e, "Failed to properly process URL");
                 None
@@ -119,33 +135,50 @@ pub async fn run(
 }
 
 // TODO: We need to also validate the certifcates and ensure they are good
-async fn get_ssl_certificate<'a>(
-    client: &reqwest::Client,
-    url_str: &str,
-) -> Result<CertCheckResult, SslCheckError> {
-    let url = reqwest::Url::parse(url_str)
-        .map_err(|e| SslCheckError::UrlParseError(url_str.to_string(), e))?;
+async fn get_ssl_certificate<'a>(client: &reqwest::Client, url_str: &str) -> SslCheck {
+    let parse_result = reqwest::Url::parse(url_str);
 
-    tracing::debug!(url = %url, "Attempting to retrieve SSL certificate");
-    let response = client
-        .head(url.clone())
-        .send()
-        .await
-        .map_err(SslCheckError::NetworkError)?;
+    let parsed_url = match parse_result {
+        Ok(url) => url,
+        Err(e) => {
+            return SslCheck {
+                url: url_str.to_string(),
+                result: Err(SslCheckError::UrlParseError(url_str.to_string(), e)),
+            };
+        }
+    };
+
+    tracing::debug!(url = url_str, "Attempting to retrieve SSL certificate");
+    let response = client.head(parsed_url.clone()).send().await;
+
+    if response.is_err() {
+        tracing::error!(url = url_str, "Failed to retrieve SSL certificate");
+        return SslCheck {
+            url: url_str.to_string(),
+            result: Err(SslCheckError::NetworkError(response.unwrap_err())),
+        };
+    };
+    let response = response.unwrap();
 
     // Access the DER encoded certificate from  TLS info
     if let Some(tls_info) = response.extensions().get::<TlsInfo>() {
         if let Some(cert_der) = tls_info.peer_certificate() {
             if let Ok((_, cert)) = X509Certificate::from_der(cert_der) {
-                let cert_result = CertCheckResult::from_x509_certificate(url_str.to_string(), cert);
+                let cert_result = CertCheckResult::from_x509_certificate(parsed_url, cert);
 
-                return Ok(cert_result);
+                return SslCheck {
+                    url: url_str.to_string(),
+                    result: Ok(cert_result),
+                };
+            } else {
+                tracing::warn!("No Cert Detail Found");
             }
         } else {
-            tracing::warn!("No Cert Detail Found");
+            tracing::warn!("No TLS Info Found");
         }
-    } else {
-        tracing::warn!("No TLS Info Found");
     }
-    Err(SslCheckError::NoCertificatesFound(url_str.to_string()))
+    SslCheck {
+        url: url_str.to_string(),
+        result: Err(SslCheckError::NoCertificatesFound(url_str.to_string())),
+    }
 }

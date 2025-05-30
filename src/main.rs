@@ -10,8 +10,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Initialize tracing subscriber
     let env_filter = EnvFilter::try_from_default_env()
-        .or_else(|_| EnvFilter::try_new(&app_config.log_level))
-        .unwrap_or_else(|_| EnvFilter::new("Info")); // Fallback to default if parsing fails
+        .or_else(|_| EnvFilter::try_new(format!("ssl_checker={}", &app_config.log_level)))
+        .unwrap_or_else(|_| EnvFilter::new("ssl_checker=info")); // Fallback to default if parsing fails
 
     tracing_fmt().with_env_filter(env_filter).init();
 
@@ -20,7 +20,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let results = run(app_config).await?;
     for result in results {
-        println!("{:?}", result);
+        if result.result.is_ok() {
+            println!(
+                "URL: {0:?} - Result: {1:?}",
+                result.url,
+                result.result.unwrap()
+            );
+        } else {
+            println!(
+                "URL: {0:?} - Error: {1:?}",
+                result.url,
+                result.result.err().unwrap()
+            );
+        }
     }
 
     Ok(())
