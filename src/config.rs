@@ -41,9 +41,9 @@ impl AppConfig {
                 return Err(ConfigError::FileNotFound(path_to_load.clone()));
             }
             let toml_content = fs::read_to_string(path_to_load)
-                .map_err(|e| ConfigError::FileReadError(path_to_load.clone(), e))?;
+                .map_err(|e| ConfigError::FileReadError(path_to_load.clone(), Box::new(e)))?;
             toml_config = toml::from_str(&toml_content)
-                .map_err(|e| ConfigError::TomlParseError(path_to_load.clone(), e))?;
+                .map_err(|e| ConfigError::TomlParseError(path_to_load.clone(), Box::new(e)))?;
         }
         // If effective_config_path was None, toml_config remains TomlConfig::default()
 

@@ -3,8 +3,8 @@ use std::{fmt, path::PathBuf};
 // --- Configuration Error Type ---
 #[derive(Debug)]
 pub enum ConfigError {
-    FileReadError(PathBuf, std::io::Error),
-    TomlParseError(PathBuf, toml::de::Error),
+    FileReadError(PathBuf, Box<std::io::Error>),
+    TomlParseError(PathBuf, Box<toml::de::Error>),
     FileNotFound(PathBuf),
     MissingUrls,
 }

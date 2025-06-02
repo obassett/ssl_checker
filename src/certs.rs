@@ -79,38 +79,34 @@ pub fn extract_sans(cert: &X509Certificate) -> Option<Vec<String>> {
     // Unwrap Subject Altername Names
     let sans_extension = cert.subject_alternative_name();
 
-    let sans: Option<Vec<String>> = if sans_extension.is_ok() {
-        // Safe due to check above
-        match sans_extension.unwrap() {
-            Some(sans) => Some(
-                sans.value
-                    .general_names
-                    .iter()
-                    .filter_map(|san| match san {
-                        // Only Get DNSNames, URI and IpAddress for check
-                        GeneralName::DNSName(dns_name) => Some(dns_name.to_string()),
-                        GeneralName::URI(uri) => Some(uri.to_string()),
-                        GeneralName::IPAddress(ip_address) => {
-                            if ip_address.len() == 4 {
-                                Some(
-                                    Ipv4Addr::from([
-                                        ip_address[0],
-                                        ip_address[1],
-                                        ip_address[2],
-                                        ip_address[3],
-                                    ])
-                                    .to_string(),
-                                )
-                            } else {
-                                None
-                            }
+    let sans: Option<Vec<String>> = if let Ok(sans_extension) = sans_extension {
+        sans_extension.map(|sans| {
+            sans.value
+                .general_names
+                .iter()
+                .filter_map(|san| match san {
+                    // Only Get DNSNames, URI and IpAddress for check
+                    GeneralName::DNSName(dns_name) => Some(dns_name.to_string()),
+                    GeneralName::URI(uri) => Some(uri.to_string()),
+                    GeneralName::IPAddress(ip_address) => {
+                        if ip_address.len() == 4 {
+                            Some(
+                                Ipv4Addr::from([
+                                    ip_address[0],
+                                    ip_address[1],
+                                    ip_address[2],
+                                    ip_address[3],
+                                ])
+                                .to_string(),
+                            )
+                        } else {
+                            None
                         }
-                        _ => None,
-                    })
-                    .collect(),
-            ),
-            None => None,
-        }
+                    }
+                    _ => None,
+                })
+                .collect()
+        })
     } else {
         None
     };
