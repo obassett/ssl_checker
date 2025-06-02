@@ -24,15 +24,15 @@ async fn send_slack_notification(
     Ok(())
 }
 
-pub async fn send_check_results(slack_endpoint: &str, results: &Vec<SslCheck>) {
+pub async fn send_check_results(slack_endpoint: &str, results: &[SslCheck]) {
     //get current date time
     let now = chrono::Utc::now();
 
     // Construct Message
-    let mut message = String::from(format!(
+    let mut message = format!(
         "SSL Checker Utility Report -  Date: {} (UTC)\n\n",
         now.format("%Y-%m-%d %H:%M:%S")
-    ));
+    );
 
     let result_lines = results
         .iter()

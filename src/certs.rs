@@ -16,7 +16,7 @@ fn valid_name_wildcard(name: &str, wildcard: &str) -> bool {
     let wildcard_suffix = &wildcard[2..];
     if let Some(idx) = name.find('.') {
         let suffix = &name[idx + 1..];
-        return suffix == wildcard_suffix && name[..idx].len() > 0;
+        return suffix == wildcard_suffix && !name[..idx].is_empty();
     }
     false
 }
@@ -36,10 +36,8 @@ pub fn valid_name(cert: &X509Certificate, name: &str) -> bool {
                 return true;
             }
 
-            if san.starts_with("*.") {
-                if valid_name_wildcard(name, san) {
-                    return true;
-                }
+            if san.starts_with("*.") && valid_name_wildcard(name, san) {
+                return true;
             }
         }
         tracing::debug!(name, sans = sans.join(","), "Checking if sans matches name");
@@ -81,11 +79,9 @@ pub fn extract_sans(cert: &X509Certificate) -> Option<Vec<String>> {
     // Unwrap Subject Altername Names
     let sans_extension = cert.subject_alternative_name();
 
-    let sans: Option<Vec<String>>;
-
-    if sans_extension.is_ok() {
+    let sans: Option<Vec<String>> = if sans_extension.is_ok() {
         // Safe due to check above
-        sans = match sans_extension.unwrap() {
+        match sans_extension.unwrap() {
             Some(sans) => Some(
                 sans.value
                     .general_names
@@ -116,7 +112,7 @@ pub fn extract_sans(cert: &X509Certificate) -> Option<Vec<String>> {
             None => None,
         }
     } else {
-        sans = None;
+        None
     };
 
     sans

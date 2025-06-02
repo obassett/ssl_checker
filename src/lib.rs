@@ -9,7 +9,6 @@ use crate::errors::SslCheckError;
 use crate::slack_webhook::send_check_results;
 use crate::{certs::extract_sans, config::AppConfig};
 
-use futures;
 use reqwest::tls::TlsInfo;
 use tokio::task;
 use url::Url;
@@ -129,8 +128,8 @@ pub async fn run(app_config: &AppConfig) -> Result<Vec<SslCheck>, Box<dyn std::e
         .tls_info(true) // Make sure we expose the tls cert
         .build()?;
 
-    let warning_days = app_config.warning_days.clone();
-    let error_days = app_config.error_days.clone();
+    let warning_days = app_config.warning_days;
+    let error_days = app_config.error_days;
 
     let handles: Vec<_> = app_config
         .urls
@@ -144,7 +143,7 @@ pub async fn run(app_config: &AppConfig) -> Result<Vec<SslCheck>, Box<dyn std::e
         })
         .collect();
 
-    let check_results = futures::future::join_all(handles)
+    let check_results: Vec<SslCheck> = futures::future::join_all(handles)
         .await
         .into_iter()
         .filter_map(|res| match res {
@@ -159,13 +158,13 @@ pub async fn run(app_config: &AppConfig) -> Result<Vec<SslCheck>, Box<dyn std::e
     // Send Slack Notifications
     if let Some(webhook_url) = &app_config.slack_webhook_url {
         tracing::info!("Sending Slack notifications...");
-        send_check_results(&webhook_url, &check_results).await;
+        send_check_results(webhook_url, &check_results).await;
     }
 
     Ok(check_results)
 }
 
-async fn get_ssl_certificate<'a>(
+async fn get_ssl_certificate(
     client: &reqwest::Client,
     url_str: &str,
     warning_days: i64,
