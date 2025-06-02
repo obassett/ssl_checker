@@ -3,6 +3,7 @@ FROM rust:1.87.0 AS builder
 
 # TARGETARCH is automatically provided by buildx, e.g., amd64, arm64
 ARG TARGETARCH
+ARG RUST_TARGET
 
 RUN apt-get update && \
     apt-get install -y musl-tools && \
