@@ -56,7 +56,6 @@ impl CertCheckResult {
         }
     }
 
-    // TODO: Extract the Issuer from the cert more cleanly, and extract the CN and SANs to make sure they match the hostname part of url
     pub fn from_x509_certificate(
         certificate_url: Url,
         warning_days: i64,

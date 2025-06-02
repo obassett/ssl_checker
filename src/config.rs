@@ -16,6 +16,7 @@ pub struct AppConfig {
     pub error_days: i64,
     pub warning_days: i64,
     pub log_level: String,
+    pub check_frequency: Option<u32>,
     pub slack_webhook_url: Option<String>,
 }
 
@@ -27,6 +28,7 @@ pub struct TomlConfig {
     error_days: Option<i64>,
     warning_days: Option<i64>,
     log_level: Option<String>,
+    check_frequency: Option<u32>,
     slack_webhook_url: Option<String>,
 }
 
@@ -64,6 +66,7 @@ impl AppConfig {
                 .log_level
                 .or(toml_config.log_level)
                 .unwrap_or_else(|| DEFAULT_LOG_LEVEL.to_string()),
+            check_frequency: args.check_frequency.or(toml_config.check_frequency),
             slack_webhook_url: args.slack_webhook_url.or(toml_config.slack_webhook_url),
         })
     }
@@ -93,6 +96,10 @@ pub struct CliArgs {
     #[clap(long, value_name = "URL")]
     slack_webhook_url: Option<String>,
 
+    /// Frequency to check urls in days - activating this runing in daemon mode
+    #[clap(long, value_name = "FREQUENCY")]
+    check_frequency: Option<u32>,
+
     /// Path to a TOML configuration file
     #[clap(short, long, value_name = "FILE_PATH")]
     config_file: Option<PathBuf>,
@@ -117,6 +124,7 @@ mod tests {
             warning_days: None,
             log_level: None,
             slack_webhook_url: None,
+            check_frequency: None,
             config_file: None,
         }
     }
@@ -129,6 +137,7 @@ mod tests {
             warning_days: Some(10),
             log_level: Some("trace".to_string()),
             slack_webhook_url: Some("https://slack.cli.com".to_string()),
+            check_frequency: None,
             config_file: None,
         };
         let config = AppConfig::build(args).unwrap();

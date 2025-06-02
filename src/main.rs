@@ -1,4 +1,4 @@
-use clap::Parser; // Needed to use CliArgs:parse
+use clap::{Parser, error}; // Needed to use CliArgs:parse
 use ssl_checker::config::{AppConfig, CliArgs};
 use ssl_checker::run;
 use tracing_subscriber::{EnvFilter, fmt as tracing_fmt};
@@ -25,22 +25,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "Effective Configuration Loaded"
     );
 
-    let results = run(&app_config).await?;
-    for result in results {
-        // if result.result.is_ok() {
-        //     println!(
-        //         "URL: {0:?}  Result: {1}",
-        //         result.url,
-        //         result.result.unwrap()
-        //     );
-        // } else {
-        //     println!(
-        //         "URL: {0:?} - Error: {1:?}",
-        //         result.url,
-        //         result.result.err().unwrap()
-        //     );
-        // }
-        println!("{}", result)
+    if let Some(check_frequency) = app_config.check_frequency {
+        tracing::info!(
+            "Running in Daemon mode - Check will be run every {} days.",
+            check_frequency
+        );
+        let mut ticker = tokio::time::interval(tokio::time::Duration::from_secs(
+            60 * 60 * 24 * check_frequency as u64,
+        ));
+        loop {
+            ticker.tick().await;
+            let results = run(&app_config).await;
+
+            match results {
+                Ok(results) => {
+                    for result in results {
+                        println!("{}", result)
+                    }
+                }
+                Err(error) => {
+                    tracing::error!(error, "Error running SSL Checks");
+                    break;
+                }
+            }
+        }
+    } else {
+        tracing::info!("Running in Non-Daemon mode");
+        let results = run(&app_config).await?;
+
+        for result in results {
+            println!("{}", result)
+        }
     }
 
     Ok(())

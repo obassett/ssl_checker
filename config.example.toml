@@ -12,5 +12,8 @@ warning_days = 25
 # Logging level (e.g., error, warn, info, debug, trace)
 log_level = "debug"
 
+# Check Frequency in days to rerun the checks
+# check_frequency = 1
+
 # Slack webhook URL for notifications (optional)
 # slack_webhook_url = "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
