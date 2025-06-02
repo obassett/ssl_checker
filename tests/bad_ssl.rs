@@ -17,7 +17,7 @@ async fn expired_cert() {
     let app_config = default_config_with_url("https://expired.badssl.com/");
 
     //Act
-    let result = run(app_config).await;
+    let result = run(&app_config).await;
     //Assert
     assert!(result.is_ok());
     let result = result.unwrap();
@@ -37,7 +37,7 @@ async fn wrong_host() {
 
     //Act
 
-    let result = run(app_config).await;
+    let result = run(&app_config).await;
     //Assert
     assert!(result.is_ok());
     let result = result.unwrap();
@@ -56,7 +56,7 @@ async fn self_signed() {
 
     //Act
 
-    let result = run(app_config).await;
+    let result = run(&app_config).await;
     //Assert
     assert!(result.is_ok());
     let result = result.unwrap();
@@ -75,7 +75,7 @@ async fn untrusted_root() {
 
     //Act
 
-    let result = run(app_config).await;
+    let result = run(&app_config).await;
     // Assert
     assert!(result.is_ok());
     let result = result.unwrap();

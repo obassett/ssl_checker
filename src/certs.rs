@@ -1,5 +1,4 @@
 use std::net::Ipv4Addr;
-use url::Host;
 use x509_parser::prelude::*;
 
 pub fn is_self_signed(cert: &X509Certificate) -> bool {
