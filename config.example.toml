@@ -1,0 +1,19 @@
+# Example configuration file for ssl_checker
+
+# List of URLs to check
+urls = ["https://google.com", "https://expired.badssl.com/"]
+
+# Days remaining on SSL certificate to trigger an error
+error_days = 10
+
+# Days remaining on SSL certificate to trigger a warning
+warning_days = 25
+
+# Logging level (e.g., error, warn, info, debug, trace)
+log_level = "debug"
+
+# Check Frequency in days to rerun the checks
+# check_frequency = 1
+
+# Slack webhook URL for notifications (optional)
+# slack_webhook_url = "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
