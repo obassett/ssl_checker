@@ -1,4 +1,4 @@
-use clap::{Parser, error}; // Needed to use CliArgs:parse
+use clap::Parser; // Needed to use CliArgs:parse
 use ssl_checker::config::{AppConfig, CliArgs};
 use ssl_checker::run;
 use tracing_subscriber::{EnvFilter, fmt as tracing_fmt};
