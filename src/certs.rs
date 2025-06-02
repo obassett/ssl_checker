@@ -1,4 +1,5 @@
 use std::net::Ipv4Addr;
+use url::Host;
 use x509_parser::prelude::*;
 
 pub fn is_self_signed(cert: &X509Certificate) -> bool {
@@ -8,6 +9,17 @@ pub fn is_self_signed(cert: &X509Certificate) -> bool {
     } else {
         false
     }
+}
+
+fn valid_name_wildcard(name: &str, wildcard: &str) -> bool {
+    tracing::debug!(name, wildcard, "Checking if wildcard matches name");
+
+    let wildcard_suffix = &wildcard[2..];
+    if let Some(idx) = name.find('.') {
+        let suffix = &name[idx + 1..];
+        return suffix == wildcard_suffix && name[..idx].len() > 0;
+    }
+    false
 }
 
 pub fn valid_name(cert: &X509Certificate, name: &str) -> bool {
@@ -20,13 +32,20 @@ pub fn valid_name(cert: &X509Certificate, name: &str) -> bool {
 
     let sans = extract_sans(cert);
     if let Some(sans) = sans {
-        for san in sans {
+        for san in &sans {
             if san.contains(name) {
                 return true;
             }
-        }
-    };
 
+            if san.starts_with("*.") {
+                if valid_name_wildcard(name, san) {
+                    return true;
+                }
+            }
+        }
+        tracing::debug!(name, sans = sans.join(","), "Checking if sans matches name");
+    };
+    tracing::warn!(name, "No Subject or Sans name match found");
     false
 }
 

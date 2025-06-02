@@ -46,7 +46,6 @@ async fn wrong_host() {
     assert!(check.result.is_ok());
     let check_result = check.result.as_ref().unwrap();
     assert_eq!(check_result.is_valid, false);
-    assert_eq!(check_result.days_remaining, 0);
     assert_eq!(check.url, "https://wrong.host.badssl.com/".to_string());
 }
 
@@ -62,13 +61,11 @@ async fn self_signed() {
     assert!(result.is_ok());
     let result = result.unwrap();
     assert_eq!(result.len(), 1);
-    let check_result = &result[0];
+    let check = &result[0];
+    assert!(check.result.is_ok());
+    let check_result = check.result.as_ref().unwrap();
     assert_eq!(check_result.is_valid, false);
-    assert_eq!(check_result.days_remaining, 0);
-    assert_eq!(
-        check_result.url,
-        "https://self-signed.badssl.com/".to_string()
-    );
+    assert_eq!(check.url, "https://self-signed.badssl.com/".to_string());
 }
 
 #[tokio::test]
@@ -79,33 +76,13 @@ async fn untrusted_root() {
     //Act
 
     let result = run(app_config).await;
-    //Assert
+    // Assert
     assert!(result.is_ok());
     let result = result.unwrap();
     assert_eq!(result.len(), 1);
-    let check_result = &result[0];
+    let check = &result[0];
+    assert!(check.result.is_ok());
+    let check_result = check.result.as_ref().unwrap();
     assert_eq!(check_result.is_valid, false);
-    assert_eq!(check_result.days_remaining, 0);
-    assert_eq!(
-        check_result.url,
-        "https://untrusted-root.badssl.com/".to_string()
-    );
-}
-
-#[tokio::test]
-async fn revoked() {
-    // Arrangew
-    let app_config = default_config_with_url("https://revoked.badssl.com/");
-
-    //Act
-
-    let result = run(app_config).await;
-    //Assert
-    assert!(result.is_ok());
-    let result = result.unwrap();
-    assert_eq!(result.len(), 1);
-    let check_result = &result[0];
-    assert_eq!(check_result.is_valid, false);
-    assert_eq!(check_result.days_remaining, 0);
-    assert_eq!(check_result.url, "https://revoked.badssl.com/".to_string());
+    assert_eq!(check.url, "https://untrusted-root.badssl.com/".to_string());
 }

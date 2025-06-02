@@ -5,16 +5,16 @@ use std::{fs, path::PathBuf};
 use crate::errors::ConfigError;
 
 // Default values for the application
-const DEFAULT_ERROR_DAYS: u32 = 14;
-const DEFAULT_WARNING_DAYS: u32 = 30;
+const DEFAULT_ERROR_DAYS: i64 = 14;
+const DEFAULT_WARNING_DAYS: i64 = 30;
 const DEFAULT_LOG_LEVEL: &str = "info";
 
 // --- Final application configuration structure ---
 #[derive(Debug)]
 pub struct AppConfig {
     pub urls: Vec<String>,
-    pub error_days: u32,
-    pub warning_days: u32,
+    pub error_days: i64,
+    pub warning_days: i64,
     pub log_level: String,
     pub slack_webhook_url: Option<String>,
 }
@@ -24,8 +24,8 @@ pub struct AppConfig {
 #[serde(deny_unknown_fields)]
 pub struct TomlConfig {
     urls: Option<Vec<String>>,
-    error_days: Option<u32>,
-    warning_days: Option<u32>,
+    error_days: Option<i64>,
+    warning_days: Option<i64>,
     log_level: Option<String>,
     slack_webhook_url: Option<String>,
 }
@@ -79,11 +79,11 @@ pub struct CliArgs {
 
     /// Days remaining on SSL certificate to trigger an error
     #[clap(short = 'e', long, value_name = "DAYS")]
-    error_days: Option<u32>,
+    error_days: Option<i64>,
 
     /// Days remaining on SSL certificate to trigger a warning
     #[clap(short = 'w', long, value_name = "DAYS")]
-    warning_days: Option<u32>,
+    warning_days: Option<i64>,
 
     /// Logging level (e.g., error, warn, info, debug, trace)
     #[clap(short, long, value_name = "LEVEL")]

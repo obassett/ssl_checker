@@ -16,23 +16,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_fmt().with_env_filter(env_filter).init();
 
     tracing::info!("Logger initialized");
-    tracing::debug!(config = ?app_config, "Effective configuration loaded");
+    tracing::info!(
+        urls = ?app_config.urls,
+        error_days = app_config.error_days,
+        warning_days = app_config.warning_days,
+        log_level = %app_config.log_level,
+        slack_webhook_url = ?app_config.slack_webhook_url,
+        "Effective Configuration Loaded"
+    );
 
-    let results = run(app_config).await?;
+    let results = run(&app_config).await?;
     for result in results {
-        if result.result.is_ok() {
-            println!(
-                "URL: {0:?} - Result: {1:?}",
-                result.url,
-                result.result.unwrap()
-            );
-        } else {
-            println!(
-                "URL: {0:?} - Error: {1:?}",
-                result.url,
-                result.result.err().unwrap()
-            );
-        }
+        // if result.result.is_ok() {
+        //     println!(
+        //         "URL: {0:?}  Result: {1}",
+        //         result.url,
+        //         result.result.unwrap()
+        //     );
+        // } else {
+        //     println!(
+        //         "URL: {0:?} - Error: {1:?}",
+        //         result.url,
+        //         result.result.err().unwrap()
+        //     );
+        // }
+        println!("{}", result)
     }
 
     Ok(())

@@ -1,9 +1,12 @@
 pub mod certs;
 pub mod config;
 pub mod errors;
+pub mod formatter;
+pub mod slack_webhook;
 
 use crate::certs::{extract_issuer, extract_subject_common_name, is_self_signed, valid_name};
 use crate::errors::SslCheckError;
+use crate::slack_webhook::send_check_results;
 use crate::{certs::extract_sans, config::AppConfig};
 
 use futures;
@@ -25,21 +28,41 @@ pub struct CertCheckResult {
     pub sans: Option<Vec<String>>,
     pub is_valid: bool,
     pub days_remaining: i64,
+    pub days_remaining_state: DaysRemainingState,
+}
+
+#[derive(Debug, Clone)]
+pub enum DaysRemainingState {
+    Ok,
+    Warning,
+    Error,
 }
 
 impl CertCheckResult {
-    pub fn new(issuer: String, subject: String, is_valid: bool, days_remaining: i64) -> Self {
+    pub fn new(
+        issuer: String,
+        subject: String,
+        is_valid: bool,
+        days_remaining: i64,
+        days_remaining_state: DaysRemainingState,
+    ) -> Self {
         Self {
             issuer,
             subject,
             sans: None,
             is_valid,
             days_remaining,
+            days_remaining_state,
         }
     }
 
     // TODO: Extract the Issuer from the cert more cleanly, and extract the CN and SANs to make sure they match the hostname part of url
-    pub fn from_x509_certificate(certificate_url: Url, cert: X509Certificate) -> Self {
+    pub fn from_x509_certificate(
+        certificate_url: Url,
+        warning_days: i64,
+        error_days: i64,
+        cert: X509Certificate,
+    ) -> Self {
         // Get Validity from cert decode - We are then going to mark it false
         // if we can't match the CN or SANS to the URL.
         let mut is_valid = cert.validity().is_valid();
@@ -71,6 +94,15 @@ impl CertCheckResult {
             );
             is_valid = false;
         }
+        let days_remaining_state: DaysRemainingState;
+
+        if days_remaining < error_days {
+            days_remaining_state = DaysRemainingState::Error;
+        } else if days_remaining < warning_days {
+            days_remaining_state = DaysRemainingState::Warning;
+        } else {
+            days_remaining_state = DaysRemainingState::Ok;
+        };
 
         Self {
             issuer,
@@ -78,21 +110,12 @@ impl CertCheckResult {
             sans,
             is_valid,
             days_remaining,
+            days_remaining_state,
         }
     }
 }
 
-pub async fn run(app_config: AppConfig) -> Result<Vec<SslCheck>, Box<dyn std::error::Error>> {
-    // For more structured logging of the config, you could do:
-    // tracing::info!(
-    //     urls = ?app_config.urls,
-    //     error_days = app_config.error_days,
-    //     warning_days = app_config.warning_days,
-    //     log_level = %app_config.log_level,
-    //     slack_webhook_url = ?app_config.slack_webhook_url,
-    //     "Effective Configuration Loaded"
-    // );
-
+pub async fn run(app_config: &AppConfig) -> Result<Vec<SslCheck>, Box<dyn std::error::Error>> {
     if let Some(webhook_url) = &app_config.slack_webhook_url {
         tracing::info!(slack_webhook_url = %webhook_url, "Slack notifications enabled.");
     } else {
@@ -104,10 +127,11 @@ pub async fn run(app_config: AppConfig) -> Result<Vec<SslCheck>, Box<dyn std::er
     let client = reqwest::Client::builder()
         .danger_accept_invalid_certs(true) // We want bad certs so we can report on them
         .use_rustls_tls() // Explicitly use rustls
-        .tls_info(true)
+        .tls_info(true) // Make sure we expose the tls cert
         .build()?;
 
-    // --- Main application logic starts here ---
+    let warning_days = app_config.warning_days.clone();
+    let error_days = app_config.error_days.clone();
 
     let handles: Vec<_> = app_config
         .urls
@@ -115,7 +139,9 @@ pub async fn run(app_config: AppConfig) -> Result<Vec<SslCheck>, Box<dyn std::er
         .into_iter()
         .map(|url| {
             let client = client.clone();
-            task::spawn(async move { get_ssl_certificate(&client, &url).await })
+            task::spawn(async move {
+                get_ssl_certificate(&client, &url, warning_days, error_days).await
+            })
         })
         .collect();
 
@@ -131,11 +157,21 @@ pub async fn run(app_config: AppConfig) -> Result<Vec<SslCheck>, Box<dyn std::er
         })
         .collect();
 
+    // Send Slack Notifications
+    if let Some(webhook_url) = &app_config.slack_webhook_url {
+        tracing::info!("Sending Slack notifications...");
+        send_check_results(&webhook_url, &check_results).await;
+    }
+
     Ok(check_results)
 }
 
-// TODO: We need to also validate the certifcates and ensure they are good
-async fn get_ssl_certificate<'a>(client: &reqwest::Client, url_str: &str) -> SslCheck {
+async fn get_ssl_certificate<'a>(
+    client: &reqwest::Client,
+    url_str: &str,
+    warning_days: i64,
+    error_days: i64,
+) -> SslCheck {
     let parse_result = reqwest::Url::parse(url_str);
 
     let parsed_url = match parse_result {
@@ -164,7 +200,12 @@ async fn get_ssl_certificate<'a>(client: &reqwest::Client, url_str: &str) -> Ssl
     if let Some(tls_info) = response.extensions().get::<TlsInfo>() {
         if let Some(cert_der) = tls_info.peer_certificate() {
             if let Ok((_, cert)) = X509Certificate::from_der(cert_der) {
-                let cert_result = CertCheckResult::from_x509_certificate(parsed_url, cert);
+                let cert_result = CertCheckResult::from_x509_certificate(
+                    parsed_url,
+                    warning_days,
+                    error_days,
+                    cert,
+                );
 
                 return SslCheck {
                     url: url_str.to_string(),
