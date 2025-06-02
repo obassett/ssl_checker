@@ -35,12 +35,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ));
         loop {
             ticker.tick().await;
+            tracing::info!("Running SSL Checks");
             let results = run(&app_config).await;
-
+            tracing::info!("SSL Checks Complete");
             match results {
                 Ok(results) => {
                     for result in results {
-                        println!("{}", result)
+                        tracing::info!("{}", result)
                     }
                 }
                 Err(error) => {
