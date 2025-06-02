@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - build_action # temporary to test builds now.
 
 jobs:
   build-and-push:
