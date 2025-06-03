@@ -52,9 +52,7 @@ jobs:
           build-args: |
             RUST_TARGET=${{ matrix.target }}
           push: true
-          # tags: |
-          #   ${{ vars.DOCKER_REGISTRY_TARGET }}:latest
-          #   ${{ vars.DOCKER_REGISTRY_TARGET }}:${{ github.sha }}
+          tags: ${{ vars.DOCKER_REGISTRY_TARGET }}
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           # Add labels if needed
           # labels: |
