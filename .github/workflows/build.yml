@@ -1,0 +1,95 @@
+name: Docker Build and Push
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - name: amd64
+            target: x86_64-unknown-linux-musl
+            runs-on: ubuntu-24.04
+          - name: arm64
+            target: aarch64-unknown-linux-musl
+            runs-on: ubuntu-24.04-arm
+
+    runs-on: ${{ matrix.runs-on }}
+    permissions:
+      contents: read
+    #   packages: write # Required for pushing to GitHub Packages Registry (ghcr.io)
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          platforms: linux/${{ matrix.name }}
+
+      - name: Log in to Docker Registry
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: docker.io
+          # For ghcr.io, registry is ghcr.io. For Docker Hub, you can omit this or use docker.io
+          # registry: ghcr.io # Uncomment and set if not Docker Hub
+
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/${{ matrix.name }}
+          build-args: |
+            RUST_TARGET=${{ matrix.target }}
+          push: true
+          tags: ${{ vars.DOCKER_REGISTRY_TARGET }}
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
+          # Add labels if needed
+          # labels: |
+          #   org.opencontainers.image.source=${{ github.repositoryUrl }}
+          #   org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Export digest
+        run: |
+          mkdir -p ${{ runner.temp }}/digests
+          digest="${{ steps.build.outputs.digest }}"
+          echo $digest > ${{ runner.temp }}/digests/${{ matrix.name }}
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-linux-${{ matrix.name }}
+          path: ${{ runner.temp }}/digests/*
+          retention-days: 1
+  merge:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-*
+          merge-multiple: true
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Create and push manifest
+        run: |
+          docker buildx imagetools create \
+            -t ${{ vars.DOCKER_REGISTRY_TARGET }}:latest \
+            -t ${{ vars.DOCKER_REGISTRY_TARGET }}:${{ github.sha }} \
+            $(for f in ${{ runner.temp }}/digests/*; do echo "${{ vars.DOCKER_REGISTRY_TARGET }}@$(cat $f)"; done)
