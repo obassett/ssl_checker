@@ -68,7 +68,7 @@ jobs:
       - name: Upload digest
         uses: actions/upload-artifact@v4
         with:
-          name: digests-linux/${{ matrix.name }}
+          name: digests-linux-${{ matrix.name }}
           path: ${{ runner.temp }}/digests/*
           retention-days: 1
   merge:
